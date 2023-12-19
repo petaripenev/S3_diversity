@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+  - bioconda
+
+dependencies:
+  - bbmap=38.98
+  - samtools=1.17
+  - python=3.11.4
+  - biopython=1.81
+  - smart_open=6.3.0

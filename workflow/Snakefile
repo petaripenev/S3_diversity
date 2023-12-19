@@ -1,0 +1,313 @@
+import pandas as pd
+import os
+
+configfile: "config/config.yaml"
+
+df_sample = pd.read_csv(config["samples"], sep="\t")
+df_sample = df_sample.fillna("")
+df_sample[df_sample.columns] = df_sample.apply(lambda x: x.str.strip())
+
+df_protein = pd.read_csv(config["proteins"], sep="\t")
+df_protein = df_protein.fillna("")
+
+for header_col in df_sample:
+    if header_col.endswith("_path"):
+        df_sample["genes_path"] = df_sample["scaffolds_path"].apply(lambda x: f"{x}.genes.fna")
+        df_sample["proteins_path"] = df_sample["scaffolds_path"].apply(lambda x: f"{x}.genes.faa")
+
+protein_to_info = df_protein.set_index("protein_name").to_dict("index")
+sample_to_info = df_sample.set_index("sample_name").to_dict("index")
+
+rule all:
+    input:
+        expand("results/proteins/{sample}_prot.faa", 
+                sample=sample_to_info.keys(),
+        ),
+        expand("results/{protein}/{sample}.hmmsearch.tbl", 
+                sample=sample_to_info.keys(),
+                protein=protein_to_info.keys(),
+        ),
+        #"results/genes/all_genes.fa",
+        expand("results/{protein}/all_{protein}_pfam_genes.fa", 
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/{protein}/all_{protein}_pfam_clusters.txt", 
+                protein=protein_to_info.keys(),
+        ),
+        # expand("results/{protein}/all_{protein}_pfam_centroids_filtered.fasta",
+        #         protein=protein_to_info.keys(),
+        # ),
+        expand("results/{protein}/longest_scaffolds.fa",
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/reads/{sample}_fw_reads.fq.gz", 
+                sample=sample_to_info.keys(),
+        ),
+        expand("results/{protein}/bbmap_ref/longest_scaffold.asm.fa",
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/maps/{protein}/{protein}_{sample}_mapped.sort.bam", 
+                sample=sample_to_info.keys(),
+                protein=protein_to_info.keys(),
+
+        ),
+        expand("results/maps/{protein}_count_table.tsv",
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/{protein}/all_{protein}_centroids_NR.tsv",
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/{protein}/all_{protein}_centroids_NR_taxa.tsv",
+                protein=protein_to_info.keys(),
+        ),
+        expand("results/{protein}_taxonomy_barplot_phylum_noUnclassified.png",
+                protein=protein_to_info.keys(),
+        ),
+
+localrules: link_assembly_genes, link_reads
+
+rule link_assembly_genes:
+    input:
+        proteins_path = lambda wildcards: sample_to_info[wildcards.sample]["proteins_path"],
+        genes_path = lambda wildcards: sample_to_info[wildcards.sample]["genes_path"],
+        scaffolds_path = lambda wildcards: sample_to_info[wildcards.sample]["scaffolds_path"],
+        bins_path = lambda wildcards: sample_to_info[wildcards.sample]["contig_to_bin"],
+        uni_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
+        uniprot_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-uniprot.b6+",
+        kegg_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
+    output:
+        linked_proteins_path = "results/proteins/{sample}_prot.faa",
+        linked_genes_path = "results/genes/{sample}_genes.fa",
+        linked_scaffolds_path = "results/scaffolds/{sample}_scaffold.fa",
+        linked_bins_path = "results/dastool_bins/{sample}.dastool.contig_to_bin.tsv",
+        linked_uni_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uni.b6+",
+        linked_uniprot_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uniprot.b6+",
+        linked_kegg_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-kegg.b6+",
+    group:
+        1
+    shell:
+        """
+        ln -s {input.proteins_path} {output.linked_proteins_path}
+        ln -s {input.genes_path} {output.linked_genes_path}
+        ln -s {input.scaffolds_path} {output.linked_scaffolds_path}
+        ln -s {input.bins_path} {output.linked_bins_path}
+        ln -s {input.uni_path} {output.linked_uni_annotations}
+        ln -s {input.uniprot_path} {output.linked_uniprot_annotations}
+        ln -s {input.kegg_path} {output.linked_kegg_annotations}
+        """
+
+rule hmmsearch_all:
+    input:
+        linked_proteins_path = "results/proteins/{sample}_prot.faa",
+    output:
+        tblout_path = "results/{protein}/{sample}.hmmsearch.tbl",
+    params:
+        hmm_path = lambda wildcards: protein_to_info[wildcards.protein]["hmm_path"],
+    shell:
+        """
+        num_seqs=$(grep '>' {input.linked_proteins_path} | wc -l) &&\
+        hmmsearch -Z $num_seqs --cut_nc --tblout {output.tblout_path} {params.hmm_path} {input.linked_proteins_path}
+        """
+
+rule merge_gene_sequences:
+    input:
+        linked_genes_path = expand("results/genes/{sample}_genes.fa",
+                sample=sample_to_info.keys(),
+        ),
+    output:
+        merged_genes_path = temp("results/genes/all_genes.fa"),
+    shell:
+        "cat {input.linked_genes_path} > {output.merged_genes_path}"
+
+rule pull_nucleotide_seqs:
+    input:
+        merged_genes_path = "results/genes/all_genes.fa",
+        tblout_path = expand("results/{protein}/{sample}.hmmsearch.tbl",
+                sample=sample_to_info.keys(),
+                protein="{protein}",
+        ),
+    output:
+        nucleotide_seqs_path = "results/{protein}/all_{protein}_pfam_genes.fa"
+     params:
+         min_length = lambda wildcards: protein_to_info[wildcards.protein]["filter_length_nt"]
+    shell:
+        """
+        cat {input.tblout_path} | grep -v '^#' | cut -d ' ' -f 1 | sort | uniq | 
+        pullseq -N -i {input.merged_genes_path} -m {params.min_length} >> {output.nucleotide_seqs_path}
+        """
+
+rule cluster_nucl_sequences:
+    input:
+        nucleotide_seqs_path = "results/{protein}/all_{protein}_pfam_genes.fa",
+    output:
+        uclust_path = "results/{protein}/all_{protein}_pfam_clusters.txt",
+        centroids_fasta_path = "results/{protein}/all_{protein}_pfam_centroids.fasta",
+    threads: config["max_threads"]
+    shell:
+        "vsearch --cluster_fast {input.nucleotide_seqs_path} --id 0.99 --centroids {output.centroids_fasta_path} --maxrejects 0 --threads {threads} --uc {output.uclust_path}"
+
+rule get_longest_contig:
+    input:
+        uclust_path = "results/{protein}/all_{protein}_pfam_clusters.txt",
+    output:
+        longest_contig_path = "results/{protein}/longest_scaffolds.fa",
+        longest_scaffold_to_gene_path = "results/{protein}/longest_scaffold_to_gene_mapping.tsv",
+    threads: config["max_threads"]
+    params:
+        protein = lambda wildcards: wildcards.protein,
+    shell:
+        """
+        workflow/scripts/identify_longest_scaffold.py \
+        --path_to_clusters {input.uclust_path}\
+        --scaffolds_dir results/scaffolds/\
+        --scaffolds_suffix '_scaffold.fa'\
+        --num_processes {threads}\
+        --output_dir results/{params.protein}/
+        """
+
+rule link_reads:
+    input:
+        fw_reads_path = lambda wildcards: sample_to_info[wildcards.sample]["forward_read_path"],
+        rv_reads_path = lambda wildcards: sample_to_info[wildcards.sample]["reverse_read_path"],
+    output:
+        linked_fw_reads_path = "results/reads/{sample}_fw_reads.fq.gz",
+        linked_rv_reads_path = "results/reads/{sample}_rv_reads.fq.gz",
+    group:
+        1
+    shell:
+        """
+        ln -s {input.fw_reads_path} {output.linked_fw_reads_path}
+        ln -s {input.rv_reads_path} {output.linked_rv_reads_path}
+        """
+
+rule generate_bbmap_index:
+    input:
+        longest_contig_path = "results/{protein}/longest_scaffolds.fa",
+    output:
+        index=directory("results/{protein}/bbmap_ref/longest_scaffold.asm.fa"),
+    log:
+        "logs/{protein}/{protein}_bbmap_index.log",
+    threads: config["max_threads"]
+    conda:
+        "envs/bbmap.yaml"
+    shell:
+        """
+        bbmap.sh \
+        reference={input.longest_contig_path} \
+        path={output.index} \
+        threads={threads} \
+        &> {log}
+        """
+
+rule map_reads_to_longest_scaffolds:
+    input:
+        index = "results/{protein}/bbmap_ref/longest_scaffold.asm.fa",
+        linked_fw_reads_path = "results/reads/{sample}_fw_reads.fq.gz",
+        linked_rv_reads_path = "results/reads/{sample}_rv_reads.fq.gz",
+    output:
+        coverage_stats = "results/maps/{protein}/covstats_{protein}_{sample}.txt",
+        coverage_hist = "results/maps/{protein}/covhist_{protein}_{sample}.txt",
+        mapping = "results/maps/{protein}/{protein}_{sample}_mapped.sort.bam",
+    log:
+        "logs/{protein}/{protein}_{sample}_mapping.log"
+    params:
+        ambiguous="random",
+        minid=config["min_map_id"],
+    threads: config["max_threads"]
+    conda:
+        "envs/bbmap.yaml"
+    shell:
+        """
+        bbmap.sh \
+        in1={input.linked_fw_reads_path} \
+        in2={input.linked_rv_reads_path} \
+        path={input.index} \
+        trimreaddescriptions=t \
+        minid={params.minid} \
+        ambiguous={params.ambiguous} \
+        threads={threads} \
+        covstats={output.coverage_stats} \
+        covhist={output.coverage_hist} \
+        outm=stdout.sam 2> {log} |\
+        sambam > {output.mapping}
+        """
+
+rule get_count_table:
+    input:
+        mapping = expand("results/maps/{protein}/{protein}_{sample}_mapped.sort.bam",
+                sample=sample_to_info.keys(),
+                protein="{protein}",
+        ),
+    output:
+        count_table = "results/maps/{protein}_count_table.tsv",
+    params:
+        min_read_perc_id=config["coverm_perc_id"],
+    shell:
+        """
+        coverm contig \
+        --bam-files {input.mapping} \
+        -m tpm \
+        -o {output.count_table} \
+        --min-read-percent-identity {params.min_read_perc_id}
+        """
+
+rule annotate_with_blast:
+    input:
+        centroids_fasta_path = "results/{protein}/all_{protein}_pfam_centroids.fasta",
+    output:
+        annotated_centroids_path = "results/{protein}/all_{protein}_centroids_NR.tsv",
+    params:
+        db="/shared/db/genbank/latest/blast/nr",
+        num_threads=config["max_threads"],
+        max_target_seqs=1,
+        outfmt="'6 std staxids'",
+    shell:
+        """
+        /shared/software/bin/blastx \
+        -query {input.centroids_fasta_path} \
+        -db {params.db} \
+        -num_threads {params.num_threads} \
+        -max_target_seqs {params.max_target_seqs} \
+        -outfmt {params.outfmt} \
+        -out {output.annotated_centroids_path}
+        """
+
+rule get_taxa:
+    input:
+        annotated_centroids_path = "results/{protein}/all_{protein}_centroids_NR.tsv",
+    output:
+        taxa_path = "results/{protein}/all_{protein}_centroids_NR_taxa.tsv",
+    shell:
+        """
+        awk -F '[;\\t]' '{{print $1,$NF}}' OFS='\\t' {input.annotated_centroids_path} | taxonkit lineage -c -i 2 -R > {output.taxa_path}
+        """
+
+#awk -F '[;\t]' '{print $1,$NF}' OFS='\t'  results/s3/all_S3_centroids_NR.tsv | taxonkit lineage -c -i 2 -R > results/s3/all_S3_centroids_NR_taxa.tsv
+
+rule taxonomy_analysis:
+    input:
+        cluster_file = "results/{protein}/all_{protein}_pfam_clusters.txt",
+        blast_results_file = "results/{protein}/all_{protein}_centroids_NR.tsv",
+        blast_taxonomy = "results/{protein}/all_{protein}_centroids_NR_taxa.tsv",
+        longest_scaffold_to_gene = "results/{protein}/longest_scaffold_to_gene_mapping.tsv",
+        protein_counts = "results/maps/{protein}_count_table.tsv",
+    output:
+        taxonomy_barplot = "results/{protein}_taxonomy_barplot_phylum_noUnclassified.png"
+    params:
+        protein = lambda wildcards: wildcards.protein,
+    conda:
+        "envs/plot.yaml"
+    shell:
+        """
+        workflow/scripts/s3_taxonomy_analysis.py \
+        --s3_clusters {input.cluster_file} \
+        --s3_blast_results {input.blast_results_file} \
+        --s3_blast_taxonomy {input.blast_taxonomy} \
+        --longest_scaffold_to_gene {input.longest_scaffold_to_gene} \
+        --rps3_counts {input.protein_counts} \
+        --output {output.taxonomy_barplot} \
+        --axis_protein {params.protein}
+        """
+
+#To get the amino-acid sequences of the centroids:
+#awk '{print $1}' ./results/S3c/all_S3c_centroids_NR_taxa.tsv | while read i; do fileName=$(echo $i | cut -d "_" -f 1-4); bioawk -v var="${i}" -c fastx '$name == var {print ">"$name"\n"substr($seq, 1, length($seq)-1)}' /groups/banfield/scratch/projects/environmental/spot/int/2023/assembly.d/pipeline/results/$fileName/${fileName}_scaffold_min1000.fa.genes.faa >> ./results/S3c/all_S3c_pfam_centroids.faa; done

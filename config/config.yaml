@@ -1,0 +1,7 @@
+samples: config/samples.tsv
+proteins: config/proteins.tsv
+
+max_threads: 10000
+
+min_map_id: 95
+coverm_perc_id: 99

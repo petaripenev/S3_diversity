@@ -1,0 +1,4 @@
+__default__:
+  M: 'your@email.edu'
+  o: 'slurm_out/{rule}/%j-{wildcards}.out'
+  p: '{resources.partition}'

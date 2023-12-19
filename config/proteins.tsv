@@ -1,0 +1,6 @@
+protein_name	hmm_path	filter_length_nt	cluster_threshold
+S3c	/shared/db/pfam/r34/individual/PF00189.22.hmm	240	0.981
+S2	/shared/db/pfam/r34/individual/PF00318.22.hmm	600	0.972
+L2c	/shared/db/pfam/r34/individual/PF03947.20.hmm	360	0.976
+L2n	/shared/db/pfam/r34/individual/PF00181.25.hmm	230	0.976
+L6	/shared/db/pfam/r34/individual/PF00347.25.hmm	230	0.975

@@ -1,0 +1,11 @@
+.snakemake*
+results/*
+16S_test*
+.vscode*
+logs/*
+slurm_out/*
+test_*
+*.pyc
+workflow/scripts/__pycache__*
+workflow/scripts/RPxSuite*
+workflow/scripts/scg_Binner.py
