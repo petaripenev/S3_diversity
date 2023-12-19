@@ -19,6 +19,8 @@ def parse_args(args):
     parser.add_argument('--longest_scaffold_to_gene', type=str, help='Longest scaffold to gene mapping file', default='./results/S3c/longest_scaffold_to_gene_mapping.tsv')
     parser.add_argument('--rps3_counts', type=str, help='RPS3 counts file', default='./results/maps/S3c_count_table.tsv')
     parser.add_argument('--taxonomy_rank', type=str, help='Taxonomy rank to plot', default='phylum')
+    parser.add_argument('--time_pos', type=int, help='Position of time variable in sample id', default=3)
+    parser.add_argument('--depth_pos', type=int, help='Position of depth variable in sample id', default=6)
     parser.add_argument('--unassigned', help='Include unassigned taxonomies in plot', default=False, action='store_true')
     parser.add_argument('--output', type=str, help='Output file name', default='s3_taxonomy_barplot.png')
     parser.add_argument('--axis_protein', type=str, help='Name of protein to plot on x-axis', default='S3c')
@@ -167,8 +169,8 @@ def main(args):
     
     #Split sample names by _ and get the first part of the split assign as new column
     color_cols = grouped_df.columns.tolist()
-    grouped_df['Time'] = grouped_df.index.str.split('').str[3]
-    grouped_df['Depth'] = grouped_df.index.str.split('').str[6]
+    grouped_df['Time'] = grouped_df.index.str.split('').str[cl_args.time_pos]
+    grouped_df['Depth'] = grouped_df.index.str.split('').str[cl_args.depth_pos]
 
     #Sort by depth then time
     grouped_df = grouped_df.sort_values(by=['Depth', 'Time'])

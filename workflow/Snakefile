@@ -295,6 +295,8 @@ rule taxonomy_analysis:
         taxonomy_barplot = "results/{protein}_taxonomy_barplot_phylum_noUnclassified.png"
     params:
         protein = lambda wildcards: wildcards.protein,
+        time_pos = config["time_pos"],
+        depth_pos = config["depth_pos"],
     conda:
         "envs/plot.yaml"
     shell:
@@ -306,7 +308,9 @@ rule taxonomy_analysis:
         --longest_scaffold_to_gene {input.longest_scaffold_to_gene} \
         --rps3_counts {input.protein_counts} \
         --output {output.taxonomy_barplot} \
-        --axis_protein {params.protein}
+        --axis_protein {params.protein} \
+        --time_pos {params.time_pos} \
+        --depth_pos {params.depth_pos} \
         """
 
 #To get the amino-acid sequences of the centroids:

@@ -5,3 +5,6 @@ max_threads: 10000
 
 min_map_id: 95
 coverm_perc_id: 99
+
+time_pos: 3
+depth_pos: 6
