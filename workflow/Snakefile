@@ -71,18 +71,18 @@ rule link_assembly_genes:
         proteins_path = lambda wildcards: sample_to_info[wildcards.sample]["proteins_path"],
         genes_path = lambda wildcards: sample_to_info[wildcards.sample]["genes_path"],
         scaffolds_path = lambda wildcards: sample_to_info[wildcards.sample]["scaffolds_path"],
-        bins_path = lambda wildcards: sample_to_info[wildcards.sample]["contig_to_bin"],
-        uni_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
-        uniprot_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-uniprot.b6+",
-        kegg_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
+        # bins_path = lambda wildcards: sample_to_info[wildcards.sample]["contig_to_bin"],
+        # uni_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
+        # uniprot_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-uniprot.b6+",
+        # kegg_path = lambda wildcards: f"{sample_to_info[wildcards.sample]['scaffolds_path']}.genes.faa-vs-kegg.b6+",
     output:
         linked_proteins_path = "results/proteins/{sample}_prot.faa",
         linked_genes_path = "results/genes/{sample}_genes.fa",
         linked_scaffolds_path = "results/scaffolds/{sample}_scaffold.fa",
-        linked_bins_path = "results/dastool_bins/{sample}.dastool.contig_to_bin.tsv",
-        linked_uni_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uni.b6+",
-        linked_uniprot_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uniprot.b6+",
-        linked_kegg_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-kegg.b6+",
+        # linked_bins_path = "results/dastool_bins/{sample}.dastool.contig_to_bin.tsv",
+        # linked_uni_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uni.b6+",
+        # linked_uniprot_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-uniprot.b6+",
+        # linked_kegg_annotations = "results/gene_annotations/{sample}_min1000.fa.genes.faa-vs-kegg.b6+",
     group:
         1
     shell:
@@ -90,11 +90,12 @@ rule link_assembly_genes:
         ln -s {input.proteins_path} {output.linked_proteins_path}
         ln -s {input.genes_path} {output.linked_genes_path}
         ln -s {input.scaffolds_path} {output.linked_scaffolds_path}
-        ln -s {input.bins_path} {output.linked_bins_path}
-        ln -s {input.uni_path} {output.linked_uni_annotations}
-        ln -s {input.uniprot_path} {output.linked_uniprot_annotations}
-        ln -s {input.kegg_path} {output.linked_kegg_annotations}
         """
+
+        # ln -s {input.bins_path} {output.linked_bins_path}
+        # ln -s {input.uni_path} {output.linked_uni_annotations}
+        # ln -s {input.uniprot_path} {output.linked_uniprot_annotations}
+        # ln -s {input.kegg_path} {output.linked_kegg_annotations}
 
 rule hmmsearch_all:
     input:
@@ -128,7 +129,7 @@ rule pull_nucleotide_seqs:
         ),
     output:
         nucleotide_seqs_path = "results/{protein}/all_{protein}_pfam_genes.fa"
-     params:
+    params:
          min_length = lambda wildcards: protein_to_info[wildcards.protein]["filter_length_nt"]
     shell:
         """
@@ -257,16 +258,16 @@ rule annotate_with_blast:
     output:
         annotated_centroids_path = "results/{protein}/all_{protein}_centroids_NR.tsv",
     params:
-        db="/shared/db/genbank/latest/blast/nr",
-        num_threads=config["max_threads"],
+        db="./blast/rps3",
         max_target_seqs=1,
         outfmt="'6 std staxids'",
+    threads: config["max_threads"]
     shell:
         """
         /shared/software/bin/blastx \
         -query {input.centroids_fasta_path} \
         -db {params.db} \
-        -num_threads {params.num_threads} \
+        -num_threads {threads} \
         -max_target_seqs {params.max_target_seqs} \
         -outfmt {params.outfmt} \
         -out {output.annotated_centroids_path}
@@ -310,7 +311,7 @@ rule taxonomy_analysis:
         --output {output.taxonomy_barplot} \
         --axis_protein {params.protein} \
         --time_pos {params.time_pos} \
-        --depth_pos {params.depth_pos} \
+        --depth_pos {params.depth_pos}
         """
 
 #To get the amino-acid sequences of the centroids:

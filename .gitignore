@@ -9,3 +9,5 @@ test_*
 workflow/scripts/__pycache__*
 workflow/scripts/RPxSuite*
 workflow/scripts/scg_Binner.py
+results_16O-7*
+slurm_out_16O-7*

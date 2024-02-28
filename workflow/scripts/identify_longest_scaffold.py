@@ -63,7 +63,7 @@ def main(args):
     gene_dict = read_S3_clusters(clusters_path)
     unique_names = get_unique_names(gene_dict)
 
-    #Add a check for available threads of the system
+    # Add a check for available threads of the system
     available_threads = os.cpu_count()
     if num_processes > available_threads:
         print(f'Number of processes requested ({num_processes}) is greater than available threads ({available_threads}).')

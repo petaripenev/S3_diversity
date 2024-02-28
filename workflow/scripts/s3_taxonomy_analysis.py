@@ -82,6 +82,8 @@ def combine_s3_results(s3_clusters_dict, s3_blast_results, longest_scaffold_to_g
     #Split the rank by ; get the index of the rank called 'phylum'
     s3_blast_taxonomy['taxon_ranks'] = s3_blast_taxonomy['taxon_ranks'].str.split(';')
     s3_blast_taxonomy['taxons'] = s3_blast_taxonomy['taxon_name'].str.split(';')
+    #Set nan to empty list
+    s3_blast_taxonomy['taxon_ranks'] = s3_blast_taxonomy['taxon_ranks'].apply(lambda x: [] if x != x else x)
     position_of_tax_rank = s3_blast_taxonomy['taxon_ranks'].apply(lambda x: x.index(tax_rank) if tax_rank in x else np.nan)
     #Get the phylum from the taxons column using the index of the phylum in the ranks column
     s3_blast_taxonomy[tax_rank] = [x[int(i)] if not np.isnan(i) else np.nan for x, i in zip(s3_blast_taxonomy['taxons'], position_of_tax_rank)]
@@ -120,7 +122,7 @@ def combine_s3_results(s3_clusters_dict, s3_blast_results, longest_scaffold_to_g
         print(f'ERROR: Columns cluster_gene and qseqid should match!')
         sys.exit(1)
 
-    #Add a column with the clusters from s3_clusters_dict to the df
+    # Add a column with the clusters from s3_clusters_dict to the df
     s3_results['cluster'] = s3_results['qseqid'].map(s3_clusters_dict)
 
     return s3_results, rps3_cols
